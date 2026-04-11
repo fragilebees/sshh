@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".config" / "sshh" / "hosts.json"
@@ -179,8 +180,13 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
         curses.init_pair(6, curses.COLOR_WHITE,   -1)
         curses.init_pair(7, curses.COLOR_CYAN,    -1)
 
+    curses.mousemask(
+        curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED | curses.REPORT_MOUSE_POSITION
+    )
+
     collapsed: set = set()
     cur = 0
+    last_click: tuple = (-1, -1, 0.0)  # (row, idx, time)
     stdscr.timeout(300)
 
     while True:
@@ -243,7 +249,7 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
 
         # Footer
         stdscr.addstr(h - 2, 0, "─" * w, curses.color_pair(6))
-        footer = " ↑↓ navigate  Enter connect  Space collapse/expand  / search  q quit   ● reachable  ○ unreachable "
+        footer = " ↑↓/click navigate  Enter/dblclick connect  Space collapse  / search  q quit   ● reachable  ○ unreachable "
         stdscr.addstr(h - 1, 0, footer[:w - 1], curses.color_pair(6))
 
         stdscr.refresh()
@@ -269,6 +275,34 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
                     collapsed.add(item.data)
             elif key in (curses.KEY_ENTER, 10, 13):
                 return item.data
+
+        elif key == curses.KEY_MOUSE:
+            try:
+                _, mx, my, _, bstate = curses.getmouse()
+            except curses.error:
+                continue
+            # Map screen row to items list index
+            item_row = my - 2  # rows 2..h-3 are list items
+            idx = item_row + offset
+            if 0 <= idx < len(items):
+                item = items[idx]
+                now = time.monotonic()
+                is_double = (
+                    bstate & curses.BUTTON1_DOUBLE_CLICKED
+                    or (
+                        last_click[1] == idx
+                        and now - last_click[2] < 0.5
+                    )
+                )
+                last_click = (my, idx, now)
+                cur = idx
+                if item.kind == "group" and is_double:
+                    if item.data in collapsed:
+                        collapsed.discard(item.data)
+                    else:
+                        collapsed.add(item.data)
+                elif item.kind == "host" and is_double:
+                    return item.data
 
         elif key == ord("/"):
             # Search functionality
