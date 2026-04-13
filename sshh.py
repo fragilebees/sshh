@@ -113,41 +113,14 @@ def _catppuccin_rgb(h: str):
     return int(r / 255 * 1000), int(g / 255 * 1000), int(b / 255 * 1000)
 
 
-def get_user_input(stdscr, prompt: str) -> str:
-    """Get user input from the terminal."""
-    curses.curs_set(1)
-    curses.echo()
-    h, w = stdscr.getmaxyx()
-    
-    # Disable timeout during input
-    stdscr.timeout(-1)
-    
-    # Display prompt at bottom
-    stdscr.addstr(h - 3, 0, "─" * w, curses.color_pair(6))
-    stdscr.addstr(h - 2, 0, f"{prompt} ", curses.color_pair(6))
-    stdscr.refresh()
-    
-    # Get input
-    user_input = stdscr.getstr(h - 2, len(prompt) + 1, 50).decode('utf-8')
-    
-    # Clear prompt area
-    stdscr.move(h - 3, 0)
-    stdscr.clrtoeol()
-    stdscr.move(h - 2, 0)
-    stdscr.clrtoeol()
-    curses.noecho()
-    curses.curs_set(0)
-    
-    # Restore timeout
-    stdscr.timeout(300)
-    
-    return user_input
-
-
 def find_host(items: list, search_term: str) -> int:
-    """Find the first host that matches the search term."""
+    """Find the best matching host: startswith takes priority over contains."""
+    term = search_term.lower()
     for i, item in enumerate(items):
-        if item.kind == "host" and search_term.lower() in item.label.lower():
+        if item.kind == "host" and item.label.lower().startswith(term):
+            return i
+    for i, item in enumerate(items):
+        if item.kind == "host" and term in item.label.lower():
             return i
     return -1
 
@@ -188,6 +161,7 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
 
     collapsed: set = set()
     cur = 0
+    search = ""
     last_click: tuple = (-1, -1, 0.0)  # (row, idx, time)
     stdscr.timeout(300)
 
@@ -238,7 +212,6 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
                 host_color = curses.color_pair(5) if is_reachable is False else curses.color_pair(3)
                 sym_color = curses.color_pair(2) if is_reachable is True else (curses.color_pair(5) if is_reachable is False else curses.color_pair(6))
                 if is_sel:
-                    # При выделении недоступного хоста - красный, доступного - зелёный
                     sel_color = curses.color_pair(5) if is_reachable is False else curses.color_pair(2)
                     stdscr.addstr(y, 0, text.ljust(w - 1)[:w - 1],
                                   sel_color | curses.A_REVERSE)
@@ -249,16 +222,26 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
                     if col_status < w - 2:
                         stdscr.addstr(y, col_status, sym, sym_color)
 
+        # Search bar
+        search_prefix = " > "
+        search_line = (search_prefix + search)[:w - 2]
+        stdscr.addstr(h - 3, 0, search_line, curses.color_pair(7) | curses.A_BOLD)
+        cursor_x = min(len(search_line), w - 2)
+        stdscr.addstr(h - 3, cursor_x, "█", curses.color_pair(7))
+
         # Footer
         stdscr.addstr(h - 2, 0, "─" * w, curses.color_pair(6))
-        footer = " ↑↓/click navigate  Enter/dblclick connect  Space collapse  / search  q quit   ● reachable  ○ unreachable "
+        footer = " ↑↓/click navigate  Enter/dblclick connect  Space collapse  Esc clear/quit   ● reachable  ○ unreachable "
         stdscr.addstr(h - 1, 0, footer[:w - 1], curses.color_pair(6))
 
         stdscr.refresh()
         key = stdscr.getch()
 
-        if key in (ord("q"), ord("Q"), 27):
-            return None
+        if key == 27:  # ESC: clear search or quit
+            if search:
+                search = ""
+            else:
+                return None
 
         elif key == curses.KEY_UP:
             cur = max(0, cur - 1)
@@ -306,13 +289,18 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
                 elif item.kind == "host" and is_double:
                     return item.data
 
-        elif key == ord("/"):
-            # Search functionality
-            search_term = get_user_input(stdscr, "Search:")
-            if search_term:
-                found_index = find_host(items, search_term)
-                if found_index != -1:
-                    cur = found_index
+        elif key in (curses.KEY_BACKSPACE, 127, 8):
+            if search:
+                search = search[:-1]
+                found = find_host(items, search) if search else -1
+                if found != -1:
+                    cur = found
+
+        elif 32 <= key <= 126:
+            search += chr(key)
+            found = find_host(items, search)
+            if found != -1:
+                cur = found
 
 
 # ── CLI commands ─────────────────────────────────────────────────────────────
