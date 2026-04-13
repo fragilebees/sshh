@@ -65,6 +65,8 @@ def connect(host: dict):
         parts += ["-p", str(host["port"])]
     if host.get("identity"):
         parts += ["-i", host["identity"]]
+    if "ghostty" in os.environ.get("TERM", ""):
+        parts += ["-o", "SetEnv=TERM=xterm-256color"]
     target = f"{host['user']}@{host['host']}" if host.get("user") else host["host"]
     parts.append(target)
     os.execvp("ssh", parts)
