@@ -231,8 +231,18 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
 
         # Footer
         stdscr.addstr(h - 2, 0, "─" * w, curses.color_pair(6))
-        footer = " ↑↓/click navigate  Enter/dblclick connect  Space collapse  Esc clear/quit   ● reachable  ○ unreachable "
-        stdscr.addstr(h - 1, 0, footer[:w - 1], curses.color_pair(6))
+        stdscr.addstr(h - 1, 0, " ", curses.color_pair(6))
+        stdscr.addstr(h - 1, 1, "↑↓", curses.color_pair(7) | curses.A_BOLD)
+        stdscr.addstr(h - 1, 3, "/click navigate  ", curses.color_pair(6))
+        stdscr.addstr(h - 1, 19, "Enter", curses.color_pair(7) | curses.A_BOLD)
+        stdscr.addstr(h - 1, 24, "/dblclick connect  ", curses.color_pair(6))
+        stdscr.addstr(h - 1, 43, "Space", curses.color_pair(7) | curses.A_BOLD)
+        stdscr.addstr(h - 1, 48, " collapse  ", curses.color_pair(6))
+        stdscr.addstr(h - 1, 59, "e", curses.color_pair(7) | curses.A_BOLD)
+        stdscr.addstr(h - 1, 60, " edit  ", curses.color_pair(6))
+        stdscr.addstr(h - 1, 67, "Esc", curses.color_pair(7) | curses.A_BOLD)
+        stdscr.addstr(h - 1, 70, " clear/quit  ", curses.color_pair(6))
+        
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -260,6 +270,16 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
                     collapsed.add(item.data)
             elif key in (curses.KEY_ENTER, 10, 13):
                 return item.data
+
+        elif key == ord("e"):
+            curses.endwin()
+            subprocess.run(["vim", str(CONFIG_PATH)])
+            cfg = load_config()
+            reachable = {}
+            for hosts in cfg["groups"].values():
+                for h in hosts:
+                    threading.Thread(target=check_host, args=(h, reachable), daemon=True).start()
+            time.sleep(0.1)
 
         elif key == curses.KEY_MOUSE:
             try:
@@ -298,6 +318,8 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
 
         elif 32 <= key <= 126:
             search += chr(key)
+            if search == ":q":
+                return None
             found = find_host(items, search)
             if found != -1:
                 cur = found
