@@ -238,10 +238,9 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
         stdscr.addstr(h - 1, 24, "/dblclick connect  ", curses.color_pair(6))
         stdscr.addstr(h - 1, 43, "Space", curses.color_pair(7) | curses.A_BOLD)
         stdscr.addstr(h - 1, 48, " collapse  ", curses.color_pair(6))
-        stdscr.addstr(h - 1, 59, "e", curses.color_pair(7) | curses.A_BOLD)
-        stdscr.addstr(h - 1, 60, " edit  ", curses.color_pair(6))
-        stdscr.addstr(h - 1, 67, "Esc", curses.color_pair(7) | curses.A_BOLD)
-        stdscr.addstr(h - 1, 70, " clear/quit  ", curses.color_pair(6))
+        stdscr.addstr(h - 1, 59, ":edit", curses.color_pair(7) | curses.A_BOLD)
+        stdscr.addstr(h - 1, 64, "Esc", curses.color_pair(7) | curses.A_BOLD)
+        stdscr.addstr(h - 1, 67, " clear/quit  ", curses.color_pair(6))
         
 
         stdscr.refresh()
@@ -260,6 +259,19 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
             cur = min(len(items) - 1, cur + 1)
 
         elif key in (curses.KEY_ENTER, 10, 13, ord(" ")):
+            if search == ":q":
+                return None
+            elif search == ":edit":
+                search = ""
+                curses.endwin()
+                subprocess.run(["vim", str(CONFIG_PATH)])
+                cfg = load_config()
+                reachable = {}
+                for hosts in cfg["groups"].values():
+                    for h in hosts:
+                        threading.Thread(target=check_host, args=(h, reachable), daemon=True).start()
+                time.sleep(0.1)
+                continue
             if not items:
                 continue
             item = items[cur]
@@ -270,16 +282,6 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
                     collapsed.add(item.data)
             elif key in (curses.KEY_ENTER, 10, 13):
                 return item.data
-
-        elif key == ord("e"):
-            curses.endwin()
-            subprocess.run(["vim", str(CONFIG_PATH)])
-            cfg = load_config()
-            reachable = {}
-            for hosts in cfg["groups"].values():
-                for h in hosts:
-                    threading.Thread(target=check_host, args=(h, reachable), daemon=True).start()
-            time.sleep(0.1)
 
         elif key == curses.KEY_MOUSE:
             try:
@@ -318,8 +320,6 @@ def run_tui(stdscr, cfg: dict, reachable: dict):
 
         elif 32 <= key <= 126:
             search += chr(key)
-            if search == ":q":
-                return None
             found = find_host(items, search)
             if found != -1:
                 cur = found
